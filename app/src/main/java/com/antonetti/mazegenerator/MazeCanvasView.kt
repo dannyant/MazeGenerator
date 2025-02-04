@@ -5,11 +5,15 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import androidx.core.graphics.ColorUtils
 import java.util.HashMap
 
 
 class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
+    private lateinit var scaleGestureDetector: ScaleGestureDetector
+
     // I need to initialize this, but height / width is not saved yet
     var maze : Maze = newMaze(2)
     var startup = true
@@ -19,9 +23,16 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     private var newDown = false
     private var hint = true;
 
+    private val transVal : Int = 32;
 
     private val black : Paint = Paint().apply {
         color = Color.BLACK
+        strokeWidth = 5f
+        style = Paint.Style.STROKE
+    }
+
+    private val blackTrans : Paint = Paint().apply {
+        color = ColorUtils.setAlphaComponent(Color.BLACK, transVal)
         strokeWidth = 5f
         style = Paint.Style.STROKE
     }
@@ -32,14 +43,32 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         style = Paint.Style.FILL
     }
 
+    private val blueTrans = Paint().apply {
+        color = ColorUtils.setAlphaComponent(Color.BLUE, transVal)
+        strokeWidth = 10f
+        style = Paint.Style.FILL
+    }
+
     private val red = Paint().apply {
         color = Color.RED
         strokeWidth = 20f
         style = Paint.Style.FILL
     }
 
+    private val redTrans = Paint().apply {
+        color = ColorUtils.setAlphaComponent(Color.RED, transVal)
+        strokeWidth = 20f
+        style = Paint.Style.FILL
+    }
+
     private val gray = Paint().apply {
         color = Color.GRAY
+        strokeWidth = 1f
+        style = Paint.Style.FILL
+    }
+
+    private val grayTrans = Paint().apply {
+        color = ColorUtils.setAlphaComponent(Color.GRAY, transVal)
         strokeWidth = 1f
         style = Paint.Style.FILL
     }
@@ -54,12 +83,30 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     val bitmapLeft : Bitmap;
     val bitmapRight : Bitmap;
 
+    var zoomLevel : Float = 1f
+    var zoomX : Float = 0f
+    var zoomY : Float = 0f
+
     init {
         val bitmap = BitmapFactory.decodeResource(resources, R.drawable.larger)
         bitmapUp = Bitmap.createBitmap(bitmap, 0, 0, bitmap.height, bitmap.width, matrix0, true)
         bitmapDown = Bitmap.createBitmap(bitmap, 0, 0, bitmap.height, bitmap.width, matrix180, true)
         bitmapLeft = Bitmap.createBitmap(bitmap, 0, 0, bitmap.height, bitmap.width, matrix270, true)
         bitmapRight = Bitmap.createBitmap(bitmap, 0, 0, bitmap.height, bitmap.width, matrix90, true)
+
+        scaleGestureDetector = ScaleGestureDetector(this.context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                var tempFactor = detector.scaleFactor
+                tempFactor = tempFactor.coerceIn(0.5f, 3.0f)
+                zoomLevel *= tempFactor
+                recenterZoomXY()
+
+                //imageView.scaleX = scaleFactor
+                //imageView.scaleY = scaleFactor
+                invalidate()
+                return true
+            }
+        })
     }
 
     val walls: MutableMap<Int, Paint> = HashMap(3)
@@ -86,11 +133,56 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         newMaze(Math.max(10, (maze.y * 0.95f).toInt()))
     }
 
+    fun moveRest() {
+        hint = false;
+        recenterZoomXY()
+    }
+
+
+
+    fun recenterZoomXY() {
+        val paintMapping = mapOf(ColorMapping.wallUp to blackTrans)
+        val zoomScenario = DrawScenario(zoomLevel, 0f, 0f, paintMapping)
+        var playerZoomX : Float  = - calculateYLoc(maze.playerX - 0.5f, zoomScenario) + width / 2
+        var playerZoomY : Float  = - calculateYLoc(maze.playerY - 0.5f, zoomScenario) + height / 2
+
+        var originZoomX : Float = - calculateXLoc(- 0.5f, zoomScenario)
+        var originZoomY : Float = - calculateYLoc(- 0.5f, zoomScenario)
+
+        zoomX = Math.min(playerZoomX, originZoomX)
+        zoomY = Math.min(playerZoomY, originZoomY)
+
+    }
+
+    fun recenterZoom() {
+        zoomLevel = 1.25f;
+        recenterZoomXY()
+    }
+
+
+        fun resetZoom() {
+        zoomLevel = 1f
+        zoomX = 0f
+        zoomY = 0f
+    }
+
+    fun toggleZoom() {
+        if (zoomOn()) {
+            resetZoom()
+        } else {
+            recenterZoom()
+        }
+    }
+
+    fun zoomOn() : Boolean {
+        return zoomLevel != 1f
+    }
+
     fun up() {
         if (maze.horizontal[maze.playerX][maze.playerY] == maze.DOWN) {
             if (maze.playerY > 0) {
                 maze.playerY--
-                hint = false;
+                moveRest()
             }
         }
     }
@@ -100,7 +192,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         if (wallValue == maze.DOWN) {
             if (maze.playerY < maze.squares[0].size - 1) {
                 maze.playerY++
-                hint = false;
+                moveRest()
             }
         } else if (wallValue == maze.ENT_EXIT) {
             larger()
@@ -111,7 +203,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         if (maze.vertical[maze.playerX][maze.playerY] == maze.DOWN) {
             if (maze.playerX > 0) {
                 maze.playerX--
-                hint = false;
+                moveRest()
             }
         }
     }
@@ -121,7 +213,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         if (wallValue == maze.DOWN) {
             if (maze.playerX < maze.squares.size - 1) {
                 maze.playerX++
-                hint = false;
+                moveRest()
             }
         } else if (wallValue == maze.ENT_EXIT) {
             larger()
@@ -129,39 +221,75 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     }
 
     fun newMaze(size : Int?) : Maze{
-        hint = false;
         var sizeVar : Int = if (size != null) size else maze.y
         if (sizeVar < 5) {
             sizeVar = 5
         }
         val ratio: Double = if ((height == 0)) 1.0 else (1.0 * width / height)
         maze = Maze((sizeVar * ratio).toInt(), sizeVar)
-        return maze.generate();
+        maze.generate();
+        moveRest()
+        resetZoom()
+        return maze
     }
 
-    fun calculateXLoc(x : Float) : Float {
-        return 1 + 1f * (width - 1) * (1.0f * x / maze.squares.size);
-    }
-
-    fun calculateYloc(y : Float) : Float {
-        return 1 + 1f * (height - 1) * (1.0f * y / maze.squares[0].size)
-    }
-
-    override fun onDraw(canvas: Canvas) {
-
-        super.onDraw(canvas)
-        if (startup) {
-            newMaze(10)
-            startup = false
+    fun calculateXLoc(x : Number, scenario : DrawScenario, trans: Boolean = true) : Float {
+        var xLoc = 1 + 1f * (width - 1) * (1.0f * x.toFloat() / maze.squares.size);
+        val xZoom = xLoc * scenario.zoomLevel
+        if (trans) {
+            return xZoom + scenario.xTrans
+        } else {
+            return xZoom
         }
+    }
 
+    fun calculateYLoc(y : Number, scenario : DrawScenario, trans: Boolean = true) : Float {
+        var yLoc = 1 + 1f * (height - 1) * (1.0f * y.toFloat() / maze.squares[0].size)
+        val yZoom = yLoc * scenario.zoomLevel
+        if (trans) {
+            return yZoom + scenario.yTrans
+        } else {
+            return yZoom
+        }
+    }
+
+    fun getDefaultScenario() : DrawScenario {
+        val paintMapping : Map<ColorMapping, Paint>;
+        if (zoomOn()) {
+            paintMapping = mapOf(
+                ColorMapping.wallUp to blackTrans,
+                ColorMapping.exitWall to redTrans,
+                ColorMapping.playerCircle to blueTrans)
+        } else {
+            paintMapping = mapOf(
+                ColorMapping.wallUp to black,
+                ColorMapping.exitWall to red,
+                ColorMapping.playerCircle to blue)
+        }
+        return DrawScenario(1f, 0f, 0f ,paintMapping)
+    }
+
+    fun getZoomScenario() : DrawScenario {
+        val paintMapping : Map<ColorMapping, Paint> = mapOf(
+            ColorMapping.wallUp to black,
+            ColorMapping.exitWall to red,
+            ColorMapping.playerCircle to blue)
+        return DrawScenario(zoomLevel, zoomX, zoomY, paintMapping)
+    }
+
+    fun drawWalls(canvas: Canvas, scenario : DrawScenario) {
         for (i in maze.vertical.indices) {
             for (j in maze.vertical[i].indices) {
-                val paint = walls[maze.vertical[i][j]];
+                var paint : Paint? = null
+                if (maze.vertical[i][j] == maze.UP) {
+                    paint = scenario.paintMapping.get(ColorMapping.wallUp)
+                } else if (maze.vertical[i][j] == maze.ENT_EXIT) {
+                    paint = scenario.paintMapping.get(ColorMapping.exitWall)
+                }
                 if (paint != null) {
-                    val x1 : Float = 1 + 1f * (canvas.width - 1) * (1.0f * i / maze.squares.size);
-                    val y1 : Float = 1 + 1f * (canvas.height - 1) * (1.0f * j / maze.squares[0].size);
-                    val y2 : Float = 1 + 1f * (canvas.height - 1) * (1.0f * (j + 1f) / maze.squares[0].size);
+                    val x1 = calculateXLoc(i, scenario)
+                    val y1 = calculateYLoc(j, scenario)
+                    val y2 = calculateYLoc(j + 1, scenario)
                     canvas.drawLine(x1, y1, x1, y2, paint)
                 }
             }
@@ -169,23 +297,37 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
 
         for (i in maze.horizontal.indices) {
             for (j in maze.horizontal[i].indices) {
-                val paint = walls[maze.horizontal[i][j]];
+                var paint : Paint? = null
+                if (maze.horizontal[i][j] == maze.UP) {
+                    paint = scenario.paintMapping.get(ColorMapping.wallUp)
+                } else if (maze.horizontal[i][j] == maze.ENT_EXIT) {
+                    paint = scenario.paintMapping.get(ColorMapping.exitWall)
+                }
+
                 if (paint != null) {
-                    val x1 : Float = 1 + 1f * (canvas.width - 1) * (1.0f * i / maze.squares.size);
-                    val x2 : Float = 1 + 1f * (canvas.width - 1) * (1.0f * (i + 1f) / maze.squares.size);
-                    val y1 : Float = 1 + 1f * (canvas.height - 1) * (1.0f * j / (maze.squares[0].size));
+                    val x1 : Float = calculateXLoc(i, scenario);
+                    val x2 : Float = calculateXLoc(i + 1, scenario)
+                    val y1 : Float = calculateYLoc(j, scenario)
                     canvas.drawLine(x1, y1, x2, y1, paint)
                 }
             }
         }
-        val pX : Float = 1 + 1f * (canvas.width - 1) * ((maze.playerX + 0.5f) / maze.squares.size);
-        val pY : Float = 1 + 1f * (canvas.height - 1) * ((maze.playerY + 0.5f) / (maze.squares[0].size));
-        val rX : Float = 1 + 1f * (canvas.width - 1) * ((0.25f) / maze.squares.size);
-        val rY : Float = 1 + 1f * (canvas.height - 1) * ((0.25f) / (maze.squares[0].size));
-        canvas.drawCircle(pX, pY, Math.min(rX, rY), blue)
+    }
 
+    fun drawPlayerCircle(canvas: Canvas, scenario : DrawScenario) {
+        val pX : Float = calculateXLoc(maze.playerX + 0.5f, scenario)
+        val pY : Float = calculateYLoc(maze.playerY + 0.5f, scenario)
+        val rX : Float = calculateXLoc(0.25f, scenario, false)
+        val rY : Float = calculateYLoc(0.25f, scenario, false)
+        val playerColor : Paint? = scenario.paintMapping.get(ColorMapping.playerCircle)
+        if (playerColor != null) {
+            canvas.drawCircle(pX, pY, Math.min(rX, rY), playerColor)
+        }
+    }
+
+    fun drawHint(canvas: Canvas, scenario : DrawScenario) {
         if (hint) {
-            var distance = maze.squares[maze.playerX][maze.playerY]
+            val distance = maze.squares[maze.playerX][maze.playerY]
             var hintX = -1.0f;
             var hintY = -1.0f;
             var matrix = matrix270
@@ -219,22 +361,42 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
             }
 
 
-            val x1 : Float = 1 + 1f * (canvas.width - 1) * (1.0f * (hintX + 0.25f) / maze.squares.size);
-            val y1 : Float = 1 + 1f * (canvas.height - 1) * (1.0f * (hintY + 0.25f) / maze.squares[0].size);
-
-            val width : Float = 1 + 1f * (canvas.width - 1) * (.5f / maze.squares.size);
-            val height : Float = 1 + 1f * (canvas.height - 1) * (.5f / maze.squares[0].size);
+            val x1 : Float = calculateXLoc(hintX + 0.25f, scenario)
+            val y1 : Float = calculateYLoc(hintY + 0.25f, scenario)
+            val width : Float = calculateXLoc(.5f, scenario, false);
+            val height : Float = calculateXLoc(.5f, scenario, false);
 
             val bitmap = BitmapFactory.decodeResource(resources, R.drawable.larger)
             val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.height, bitmap.width, matrix, true)
             val resizedBitmap = Bitmap.createScaledBitmap(rotatedBitmap, width.toInt(), height.toInt(), true)
             canvas.drawBitmap(resizedBitmap, x1, y1, gray)
         }
+    }
 
+    override fun onDraw(canvas: Canvas) {
+
+        super.onDraw(canvas)
+        if (startup) {
+            newMaze(10)
+            startup = false
+        }
+
+        val defaultScenario = getDefaultScenario()
+        drawWalls(canvas, defaultScenario)
+        drawPlayerCircle(canvas, defaultScenario)
+        drawHint(canvas, defaultScenario)
+
+        if (zoomOn()) {
+            val zoomScenario = getZoomScenario()
+            drawWalls(canvas, zoomScenario)
+            drawPlayerCircle(canvas, zoomScenario)
+            drawHint(canvas, zoomScenario)
+        }
     }
 
     // Override onTouchEvent to track dragging
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        scaleGestureDetector.onTouchEvent(event)
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 // Store the starting position of the drag

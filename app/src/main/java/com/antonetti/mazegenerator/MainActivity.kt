@@ -39,6 +39,11 @@ class MainActivity : AppCompatActivity() {
                 canvasView.invalidate()
                 true
             }
+            R.id.zoom -> {
+                canvasView.toggleZoom()
+                canvasView.invalidate()
+                true
+            }
             R.id.hint -> {
                 canvasView.hintOn()
                 canvasView.invalidate()

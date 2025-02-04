@@ -11,6 +11,11 @@
             android:title="Smaller"
             app:showAsAction="always"/>
     <item
+            android:id="@+id/zoom"
+            android:icon="@drawable/zoom"
+            android:title="Zoom"
+            app:showAsAction="always"/>
+    <item
             android:id="@+id/hint"
             android:icon="@drawable/hint"
             android:title="Hint"

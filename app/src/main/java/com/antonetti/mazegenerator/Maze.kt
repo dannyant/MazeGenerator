@@ -14,7 +14,8 @@ class Maze (val x : Int, val y : Int) {
     val ENT_EXIT : Int = 3;
 
 
-    val rand = Random(1);
+    val rand = Random(System.nanoTime());
+    var occlusionCulling : Boolean = false;
     val squares: Array<IntArray> = Array(x) { row ->
         IntArray(y) { col -> row * y + col + 1 }
     }
@@ -33,6 +34,10 @@ class Maze (val x : Int, val y : Int) {
                 if (value == from) squares[i][j] = to
             }
         }
+    }
+
+    fun toggleCulling() {
+        occlusionCulling = !occlusionCulling
     }
 
     fun initLines() : MutableList<MazeLine> {
