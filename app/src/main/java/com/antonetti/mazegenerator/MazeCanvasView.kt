@@ -67,12 +67,6 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         style = Paint.Style.FILL
     }
 
-    private val grayTrans = Paint().apply {
-        color = ColorUtils.setAlphaComponent(Color.GRAY, transVal)
-        strokeWidth = 1f
-        style = Paint.Style.FILL
-    }
-
     val matrix0   = Matrix().apply { postRotate(0f) }
     val matrix90  = Matrix().apply { postRotate(90f) }
     val matrix180 = Matrix().apply { postRotate(180f) }
@@ -392,6 +386,17 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
             drawPlayerCircle(canvas, zoomScenario)
             drawHint(canvas, zoomScenario)
         }
+
+        /**
+        maze.resolveCulling()
+        val pX : Float = calculateXLoc(maze.playerX + 0.5f, defaultScenario)
+        val pY : Float = calculateYLoc(maze.playerY + 0.5f, defaultScenario)
+        for (pt in maze.pointsList) {
+            val px : Float = calculateXLoc(pt.x, defaultScenario)
+            val py : Float = calculateYLoc(pt.y, defaultScenario)
+            canvas.drawLine(pX, pY, px, py, blue)
+        }
+        **/
     }
 
     // Override onTouchEvent to track dragging
