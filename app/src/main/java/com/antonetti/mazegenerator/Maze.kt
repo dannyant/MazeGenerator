@@ -1,11 +1,17 @@
 package com.antonetti.mazegenerator
 
 import android.util.Rational
+import com.antonetti.util.RationalExtensions.plus
+import com.antonetti.util.RationalExtensions.minus
+import com.antonetti.util.RationalExtensions.times
 import java.util.*
 import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.random.Random
+import kotlin.math.atan2
+import kotlin.math.floor
 
 class Maze (val x : Int, val y : Int) {
 
@@ -15,7 +21,6 @@ class Maze (val x : Int, val y : Int) {
     val DOWN : Int = 1;
     val UNDETERMINED : Int = 0;
     val ENT_EXIT : Int = 3;
-    val CULLING_EPSILON = 0.001
 
     val rand = Random(1);
     var occlusionCulling : Boolean = false;
@@ -31,10 +36,27 @@ class Maze (val x : Int, val y : Int) {
     var exitX : Int = 0
     var exitY : Int = 0;
 
-    fun resolveSquares(from: Int, to: Int) {
-        squares.forEachIndexed { i, row ->
-            row.forEachIndexed { j, value ->
-                if (value == from) squares[i][j] = to
+    fun resolveSquares(startingSquare : Square, from: Int, to: Int) {
+        val queue = LinkedList<Square>();
+        queue.add(startingSquare)
+        while (!queue.isEmpty()) {
+            val s = queue.remove()
+            squares[s.x][s.y] = to
+            if (s.x + 1 < squares.size && squares[s.x + 1][s.y] == from) {
+                queue.add(Square(s.x + 1, s.y))
+                squares[s.x + 1][s.y] = to
+            }
+            if (s.x > 0 && squares[s.x - 1][s.y] == from) {
+                queue.add(Square(s.x - 1, s.y))
+                squares[s.x - 1][s.y] = to
+            }
+            if (s.y + 1 < squares[0].size && squares[s.x][s.y + 1] == from) {
+                queue.add(Square(s.x, s.y + 1))
+                squares[s.x][s.y + 1] = to
+            }
+            if (s.y > 0 && squares[s.x][s.y - 1] == from) {
+                queue.add(Square(s.x, s.y - 1))
+                squares[s.x][s.y - 1] = to
             }
         }
     }
@@ -111,14 +133,14 @@ class Maze (val x : Int, val y : Int) {
             if (l.horizontal) {
                 if (squares[l.x][l.y - 1] != squares[l.x][l.y]) {
                     horizontal[l.x][l.y] = DOWN
-                    resolveSquares(squares[l.x][l.y - 1], squares[l.x][l.y])
+                    resolveSquares(Square(l.x, l.y - 1), squares[l.x][l.y - 1], squares[l.x][l.y])
                 } else {
                     lines = initLines()
                 }
             } else {
                 if (squares[l.x - 1][l.y] != squares[l.x][l.y]) {
                     vertical[l.x][l.y] = DOWN
-                    resolveSquares(squares[l.x - 1][l.y], squares[l.x][l.y])
+                    resolveSquares(Square(l.x - 1, l.y), squares[l.x - 1][l.y], squares[l.x][l.y])
                 } else {
                     lines = initLines()
                 }
@@ -163,110 +185,82 @@ class Maze (val x : Int, val y : Int) {
         return Rational(x * 2 - playerX * 2 + 1, y - playerY * 2 + 1)
     }
 
-    data class Point(val x : Float, val y : Float);
-    var pointsList : MutableList<Point> = ArrayList();
+    data class Point(val x : Float, val y : Float, val horizontal : Boolean, val isUp : Boolean)
+    var pointsList : MutableList<Square> = ArrayList();
 
-    fun findNearestCWIntercept(slopeCW : Rational) : Rational {
-        var x = playerX + 0.5
-        var y = playerY + 0.5
-        val slope = slopeCW.toDouble()
+    fun getPointPlayerDistance(pt : Point) : Float {
+        val xDist = playerX - pt.x
+        val yDist = playerY - pt.y
+        return xDist * xDist + yDist * yDist
+    }
 
-        // Determine step direction
-        val xStep = if (slopeCW.numerator >= 0) 1 else -1
-        val yStep = if (slopeCW.numerator > 0) 1 else -1
+    fun getPointPlayerDistance(pt : Square) : Int {
+        val xDist = playerX - pt.x
+        val yDist = playerY - pt.y
+        return xDist * xDist + yDist * yDist
+    }
 
-        var count = 10
-        while(count > 0) {
-            count--
-            // Find the next vertical and horizontal intercepts
-            val nextVerticalX = if (xStep > 0) kotlin.math.ceil(x) else kotlin.math.floor(x) - 1
-            val nextVerticalY = y + slope * (nextVerticalX - x)
+    fun calculateFullAngle(x2: Double, y2: Double): Double {
+        val deltaY = y2 - playerY
+        val deltaX = x2 - playerX
+        var angle = atan2(deltaY, deltaX)
 
-            val nextHorizontalY = if (yStep > 0) kotlin.math.ceil(y) else kotlin.math.floor(y) - 1
-            val nextHorizontalX = x + (nextHorizontalY - y) / slope
+        if (angle < 0) {
+            angle += Math.PI * 2
+        }
 
-            // Determine which intercept is closer
-            val distToVertical = abs(nextVerticalX - x)
-            val distToHorizontal = abs(nextHorizontalY - y)
+        return angle
+    }
 
-            var findClosest : MutableList<Point> = ArrayList();
-            if (nextVerticalX.toInt() < vertical.size &&
-                nextVerticalY.toInt() < vertical[0].size &&
-                vertical[nextVerticalX.toInt()][nextVerticalY.toInt()] == UP) {
-                findClosest.add(Point(nextVerticalX.toFloat(), nextVerticalY.toFloat()))
-            }
-
-            if (nextHorizontalX.toInt() < horizontal.size &&
-                nextHorizontalY.toInt() < horizontal[0].size &&
-                horizontal[nextHorizontalX.toInt()][nextHorizontalY.toInt()] == UP) {
-                findClosest.add(Point(nextHorizontalX.toFloat(), nextHorizontalY.toFloat()))
-            }
-
-            if (distToVertical < distToHorizontal) {
-                if (vertical[nextVerticalX.toInt()][nextVerticalY.toInt()] == UP) {
-                    pointsList.add(Point(nextVerticalX.toFloat(), nextVerticalY.toFloat()))
-                    return calculatePlayerSlope(nextVerticalX.toInt(), ceil(nextVerticalY).toInt());
-                }
-                x = nextVerticalX
-                y = nextVerticalY
-            } else if (distToVertical > distToHorizontal || (distToVertical == distToHorizontal && distToVertical != 0.0)) {
-                if (horizontal[nextHorizontalX.toInt()][nextHorizontalY.toInt()] == UP) {
-                    pointsList.add(Point(nextHorizontalX.toFloat(), nextHorizontalY.toFloat()))
-                    return calculatePlayerSlope(ceil(nextVerticalX).toInt(), nextVerticalY.toInt());
-                }
-                x = nextHorizontalX
-                y = nextHorizontalY
+    fun ccwVertex(pt : Point) : Square {
+        if (pt.horizontal) {
+            if (calculateFullAngle(floor(pt.x.toDouble()), floor(pt.y.toDouble())) >
+                calculateFullAngle(floor((pt.x + 1).toDouble()), floor(pt.y.toDouble()))) {
+                return Square(pt.x.toInt(), pt.y.toInt())
             } else {
-
-                x += CULLING_EPSILON
-                y += CULLING_EPSILON * slope
+                return Square((pt.x + 1).toInt(), pt.y.toInt())
+            }
+        } else {
+            if (calculateFullAngle(floor(pt.x.toDouble()), floor(pt.y.toDouble())) >
+                calculateFullAngle(floor((pt.x).toDouble()), floor((pt.y+ 1).toDouble()))) {
+                return Square(pt.x.toInt(), pt.y.toInt())
+            } else {
+                return Square(pt.x.toInt(), (pt.y + 1).toInt())
             }
         }
-        return slopeCW
+    }
+
+    fun crossProduct (s1 : Square, s2 : Square) : Double {
+        val playerXPos = Rational(playerX * 2 + 1, 2)
+        val playerYPos = Rational(playerY * 2 + 1, 2)
+        return (s1.x - playerXPos.toDouble()) * (s2.y - playerXPos.toDouble()) -
+                (s2.x - playerXPos.toDouble()) * (s1.y - playerXPos.toDouble())
+    }
+
+    fun findNearestCWIntercept(initalSquare : Square) : Square {
+        val playerXPos = Rational(playerX * 2 + 1, 2)
+        val playerYPos = Rational(playerY * 2 + 1, 2)
+
+        val squareVert : Square = Square(Int.MAX_VALUE, Int.MAX_VALUE);
+        val squareVHoriz : Square = Square(Int.MAX_VALUE, Int.MAX_VALUE);
+        var slope = calculatePlayerSlope(initalSquare.x, initalSquare.y)
+        for (i in playerX + 1 until vertical.size) {
+            val targetY = (Rational(i, 1) - playerXPos) * slope
+            val crossProductLower = crossProduct(initalSquare, Square(i, targetY.toInt()))
+            val crossProductUpper = crossProduct(initalSquare, Square(i, ceil(targetY.toDouble()).toInt()))
+        }
+        return squareVert
     }
 
     fun resolveCulling() {
         pointsList = ArrayList();
 
-        var slopeCW : Rational = Rational(-1, -1);
-        var slopeCCW : Rational = Rational(-1, -1);
-        var initalLine = playerY
-        while (initalLine >= 0) {
-            if (horizontal[playerX][initalLine] == UP) {
-                slopeCCW = calculatePlayerSlope(playerX + 1, initalLine)
-                slopeCW = calculatePlayerSlope(playerX, initalLine)
-                pointsList.add(Point(playerX.toFloat() + 1, initalLine.toFloat()))
-                pointsList.add(Point(playerX.toFloat(), initalLine.toFloat()))
-                initalLine = -1
-            }
-            initalLine--
+        var slopeCCW = Square(1, Integer.MAX_VALUE);
+        while (true) {
+            val square = findNearestCWIntercept(slopeCCW)
+            pointsList.add(square)
+            //slopeCCW = calculatePlayerSlope(square.x, square.y)
+            print(slopeCCW)
         }
-
-        var slopeCWEnd : Rational = Rational(-1, -1);
-        var slopeCCWEnd : Rational = Rational(-1, -1);
-        initalLine = playerY + 1
-        while (initalLine < horizontal[playerX].size) {
-            if (horizontal[playerX][initalLine] == UP) {
-                slopeCCWEnd = calculatePlayerSlope(playerX + 1, initalLine)
-                slopeCWEnd = calculatePlayerSlope(playerX, initalLine)
-                pointsList.add(Point(playerX.toFloat() + 1, initalLine.toFloat()))
-                pointsList.add(Point(playerX.toFloat(), initalLine.toFloat()))
-                initalLine = horizontal[playerX].size
-            }
-            initalLine++
-        }
-
-        slopeCW = findNearestCWIntercept(slopeCW)
-        slopeCW = findNearestCWIntercept(slopeCW)
-        slopeCW = findNearestCWIntercept(slopeCW)
-        slopeCW = findNearestCWIntercept(slopeCW)
-
-
-        //var count = 0;
-        //while (slopeCW > slopeCCWEnd && count < 10) {
-        //    slopeCW = findNearestCWIntercept(slopeCW)
-        //    count++
-        //}
-
     }
 }

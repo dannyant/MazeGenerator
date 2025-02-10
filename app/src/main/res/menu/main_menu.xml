@@ -20,9 +20,4 @@
             android:icon="@drawable/hint"
             android:title="Hint"
             app:showAsAction="always"/>
-    <item
-            android:id="@+id/hardmode"
-            android:icon="@drawable/hardmode"
-            android:title="HardMode"
-            app:showAsAction="always"/>
 </menu>

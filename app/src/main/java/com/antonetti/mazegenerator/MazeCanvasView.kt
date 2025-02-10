@@ -1,6 +1,7 @@
 package com.antonetti.mazegenerator
 
 import android.content.Context
+import android.content.Context.MODE_PRIVATE
 import android.graphics.*
 import android.util.AttributeSet
 import android.view.KeyEvent
@@ -15,7 +16,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     private lateinit var scaleGestureDetector: ScaleGestureDetector
 
     // I need to initialize this, but height / width is not saved yet
-    var maze : Maze = newMaze(2)
+    lateinit var maze : Maze
     var startup = true
 
     private var lastX = 0f
@@ -106,6 +107,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     val walls: MutableMap<Int, Paint> = HashMap(3)
 
     init {
+        newMaze(null)
         walls[maze.UP] = black
         walls[maze.ENT_EXIT] = red
     }
@@ -215,11 +217,10 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
     }
 
     fun newMaze(size : Int?) : Maze{
-        var sizeVar : Int = if (size != null) size else maze.y
-        if (sizeVar < 5) {
-            sizeVar = 5
-        }
+        var sizeVar : Int = if (size != null) size else getMazeSize()
+
         val ratio: Double = if ((height == 0)) 1.0 else (1.0 * width / height)
+        saveMazeSize(sizeVar)
         maze = Maze((sizeVar * ratio).toInt(), sizeVar)
         maze.generate();
         moveRest()
@@ -367,11 +368,24 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
         }
     }
 
+    fun getMazeSize() : Int {
+        val sharedPreferences = context.getSharedPreferences("MazeSize", MODE_PRIVATE)
+        return sharedPreferences.getInt("MazeSize", 10)
+    }
+
+    fun saveMazeSize(size : Int) {
+        val sharedPreferences = context.getSharedPreferences("MazeSize", MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        editor.putInt("MazeSize", size)  // Save integer
+        editor.apply()
+    }
+
+
     override fun onDraw(canvas: Canvas) {
 
         super.onDraw(canvas)
         if (startup) {
-            newMaze(10)
+            newMaze(getMazeSize())
             startup = false
         }
 
@@ -396,7 +410,7 @@ class MazeCanvasView(context: Context, attrs: AttributeSet?) : View(context, att
             val py : Float = calculateYLoc(pt.y, defaultScenario)
             canvas.drawLine(pX, pY, px, py, blue)
         }
-        **/
+        */
     }
 
     // Override onTouchEvent to track dragging

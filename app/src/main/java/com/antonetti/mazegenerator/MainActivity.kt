@@ -49,11 +49,13 @@ class MainActivity : AppCompatActivity() {
                 canvasView.invalidate()
                 true
             }
+            /**
             R.id.hardmode -> {
                 canvasView.maze.toggleCulling()
                 canvasView.invalidate()
                 true
             }
+            */
             else -> super.onOptionsItemSelected(item)
         }
     }
